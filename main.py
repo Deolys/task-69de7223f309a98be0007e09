@@ -1,68 +1,49 @@
 import os
-from pathlib import Path
-from dotenv import load_dotenv
-from langchain_community.tools import DuckDuckGoSearchRun
-from langchain.agents import AgentExecutor, create_openai_functions_agent
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.messages import HumanMessage
-from typing import Dict, Any
+import json
+import requests
+from bs4 import BeautifulSoup
+from deep_agents_from_scratch.agent import Agent
+from openai import OpenAI
 
-# Load environment variables (API keys)
-load_dotenv()
-OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
-if not OPENAI_API_KEY:
-    raise RuntimeError("OPENAI_API_KEY not set in .env")
-
-# Simple virtual file system as a dict
-virtual_fs: Dict[str, str] = {}
-
-# Tool to write a virtual file
-class WriteVirtualFileTool:
-    name = "write_virtual_file"
-    description = "Write content to a virtual file. The file will be saved locally at the end of execution."
-
-    def __call__(self, file_name: str, content: str) -> str:
-        virtual_fs[file_name] = content
-        return f"Virtual file '{file_name}' written." 
-
-# Tool to search the web (DuckDuckGo)
-search_tool = DuckDuckGoSearchRun(name="duckduckgo_search", description="Search the web for information.")
-
-# Define agent tools list
-tools = [WriteVirtualFileTool(), search_tool]
-
-# Prompt template for the deep agent
-prompt_template = ChatPromptTemplate.from_messages([
-    ("system", "You are a helpful assistant that can search the internet and write virtual files. Use the provided tools.")
-])
-
-# Create OpenAI function calling agent
-agent = create_openai_functions_agent(
-    llm=ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key=OPENAI_API_KEY),
-    tools=[t for t in tools],
-    prompt=prompt_template,
-)
-
-# Wrap into executor
-executor = AgentExecutor(agent=agent, tools=[t for t in tools], verbose=True)
-
-# Main workflow: ask user a question, agent searches and writes files
-if __name__ == "__main__":
-    # Example task: gather info about deep agents and save to file
-    user_query = (
-        "Write a brief summary of the DeepAgents from Scratch project and store it in a file named 'deepagents_summary.txt'."
+def search_perplexity(query: str) -> str:
+    """Use Perplexity API to get a concise answer for the query."""
+    api_key = os.getenv("PERPLEXITY_API_KEY")
+    if not api_key:
+        raise RuntimeError("PERPLEXITY_API_KEY environment variable is required")
+    client = OpenAI(api_key=api_key, base_url="https://api.perplexity.ai/v1")
+    response = client.chat.completions.create(
+        model="llama-3.1-sonar-large",
+        messages=[{"role": "user", "content": query}],
+        temperature=0.2,
+        max_tokens=512,
     )
-    print("Running agent...")
-    result = executor.invoke({"input": user_query})
-    print("Agent finished.")
+    return response.choices[0].message.content.strip()
 
-    # Persist virtual files to disk
-    output_dir = Path("output_files")
-    output_dir.mkdir(exist_ok=True)
-    for fname, content in virtual_fs.items():
-        file_path = output_dir / fname
-        file_path.write_text(content)
-        print(f"Saved {file_path}")
+class SimpleDeepAgent(Agent):
+    def __init__(self, name: str = "PerplexitySearchAgent"):
+        super().__init__(name=name)
+        self.add_tool("search", search_perplexity)
 
-    # Optionally, return the result of the last tool call
-    print("Result:", result.get("output", "No output returned."))
+    def run(self, query: str) -> dict:
+        # Perform search and create virtual file content
+        answer = self.run_tool("search", query=query)
+        virtual_file = {
+            "path": "output.txt",
+            "content": f"Query: {query}\n\nAnswer:\n{answer}",
+        }
+        return virtual_file
+
+if __name__ == "__main__":
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Deep Agent that searches the web and creates a file")
+    parser.add_argument("query", type=str, help="Search query for the agent")
+    args = parser.parse_args()
+
+    agent = SimpleDeepAgent()
+    result = agent.run(args.query)
+    # Write virtual file to disk (simulating upload)
+    os.makedirs(os.path.dirname(result["path"]), exist_ok=True)
+    with open(result["path"], "w", encoding="utf-8") as f:
+        f.write(result["content"])
+    print(f"Virtual file created at {result['path']}")
