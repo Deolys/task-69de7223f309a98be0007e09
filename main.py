@@ -1,74 +1,68 @@
 import os
-import json
-import requests
-from bs4 import BeautifulSoup
+from pathlib import Path
+from dotenv import load_dotenv
+from langchain_community.tools import DuckDuckGoSearchRun
+from langchain.agents import AgentExecutor, create_openai_functions_agent
+from langchain_core.prompts import ChatPromptTemplate
+from langchain_core.messages import HumanMessage
+from typing import Dict, Any
 
-# Simple deep agent that searches the web and creates virtual files
+# Load environment variables (API keys)
+load_dotenv()
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+if not OPENAI_API_KEY:
+    raise RuntimeError("OPENAI_API_KEY not set in .env")
 
-def search_web(query: str, num_results: int = 3) -> list[dict]:
-    """Return a list of search result dicts with title and snippet."""
-    url = "https://duckduckgo.com/html/"
-    params = {"q": query}
-    resp = requests.get(url, params=params)
-    soup = BeautifulSoup(resp.text, "html.parser")
-    results = []
-    for a in soup.select("a.result__a")[:num_results]:
-        title = a.get_text()
-        link = a['href']
-        snippet_tag = a.find_next_sibling("div", class_="result__snippet")
-        snippet = snippet_tag.get_text() if snippet_tag else ""
-        results.append({"title": title, "link": link, "snippet": snippet})
-    return results
+# Simple virtual file system as a dict
+virtual_fs: Dict[str, str] = {}
 
+# Tool to write a virtual file
+class WriteVirtualFileTool:
+    name = "write_virtual_file"
+    description = "Write content to a virtual file. The file will be saved locally at the end of execution."
 
-def fetch_page(url: str) -> str:
-    try:
-        r = requests.get(url, timeout=10)
-        r.raise_for_status()
-        return r.text
-    except Exception as e:
-        print(f"Failed to fetch {url}: {e}")
-        return ""
+    def __call__(self, file_name: str, content: str) -> str:
+        virtual_fs[file_name] = content
+        return f"Virtual file '{file_name}' written." 
 
+# Tool to search the web (DuckDuckGo)
+search_tool = DuckDuckGoSearchRun(name="duckduckgo_search", description="Search the web for information.")
 
-def extract_text(html: str) -> str:
-    soup = BeautifulSoup(html, "html.parser")
-    for script in soup(['script', 'style']):
-        script.decompose()
-    text = soup.get_text(separator="\n", strip=True)
-    return text
+# Define agent tools list
+tools = [WriteVirtualFileTool(), search_tool]
 
+# Prompt template for the deep agent
+prompt_template = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful assistant that can search the internet and write virtual files. Use the provided tools.")
+])
 
-def create_virtual_file(name: str, content: str) -> None:
-    # In a real scenario we might store this in memory or a database.
-    # Here we simply write to disk for demonstration.
-    with open(name, "w", encoding="utf-8") as f:
-        f.write(content)
+# Create OpenAI function calling agent
+agent = create_openai_functions_agent(
+    llm=ChatOpenAI(temperature=0, model="gpt-4o-mini", api_key=OPENAI_API_KEY),
+    tools=[t for t in tools],
+    prompt=prompt_template,
+)
 
+# Wrap into executor
+executor = AgentExecutor(agent=agent, tools=[t for t in tools], verbose=True)
 
-def main():
-    query = input("Enter search query: ")
-    results = search_web(query)
-    print(f"Found {len(results)} results.")
-    for i, res in enumerate(results, 1):
-        print(f"{i}. {res['title']}\n   {res['link']}")
-
-    # Fetch first result and create a virtual file
-    if results:
-        url = results[0]["link"]
-        html = fetch_page(url)
-        text = extract_text(html)
-        filename = "virtual_page.txt"
-        create_virtual_file(filename, text)
-        print(f"Virtual file '{filename}' created with extracted content.")
-
-    # Example of creating multiple virtual files from queries
-    topics = ["deep learning", "python programming", "data science"]
-    for topic in topics:
-        page_text = extract_text(fetch_page(f"https://en.wikipedia.org/wiki/{topic.replace(' ', '_')}") or "")
-        if page_text:
-            create_virtual_file(f"{topic.replace(' ', '_')}.txt", page_text)
-            print(f"Created file for topic: {topic}")
-
+# Main workflow: ask user a question, agent searches and writes files
 if __name__ == "__main__":
-    main()
+    # Example task: gather info about deep agents and save to file
+    user_query = (
+        "Write a brief summary of the DeepAgents from Scratch project and store it in a file named 'deepagents_summary.txt'."
+    )
+    print("Running agent...")
+    result = executor.invoke({"input": user_query})
+    print("Agent finished.")
+
+    # Persist virtual files to disk
+    output_dir = Path("output_files")
+    output_dir.mkdir(exist_ok=True)
+    for fname, content in virtual_fs.items():
+        file_path = output_dir / fname
+        file_path.write_text(content)
+        print(f"Saved {file_path}")
+
+    # Optionally, return the result of the last tool call
+    print("Result:", result.get("output", "No output returned."))
