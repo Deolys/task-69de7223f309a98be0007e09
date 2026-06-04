@@ -1,27 +1,81 @@
-#!/usr/bin/env python3
-"""
-Simple LangChain agent that generates a summary and writes it to a file.
-"""
 import os
+from typing import Dict, Any
 from langchain.llms import OpenAI
-from langchain.prompts import PromptTemplate
-from langchain.chains import LLMChain
+from langchain.tools import BaseTool
+import requests
 
-def main():
-    # Initialize the LLM (requires OPENAI_API_KEY env variable)
-    llm = OpenAI(temperature=0.2, model="gpt-4o-mini")
-    prompt = PromptTemplate(
-        input_variables=["topic"],
-        template="Write a concise summary about {topic}.",
-    )
-    chain = LLMChain(llm=llm, prompt=prompt)
+# Simple web search tool using DuckDuckGo instant answer API
+class WebSearchTool(BaseTool):
+    name = "web_search"
+    description = "Search the web for a query and return a short summary. Use only when you need up-to-date information."
 
-    topic = "Python programming language"
-    summary = chain.run(topic)
+    def _run(self, query: str) -> str:
+        try:
+            url = f"https://api.duckduckgo.com/?q={requests.utils.quote(query)}&format=json"
+            resp = requests.get(url, timeout=10)
+            data = resp.json()
+            return data.get("AbstractText", "No summary available.")
+        except Exception as e:
+            return f"Error during web search: {e}"
 
-    os.makedirs("output", exist_ok=True)
-    with open(os.path.join("output", "summary.txt"), "w", encoding="utf-8") as f:
-        f.write(summary)
+# Virtual file system to store generated files in memory
+class VirtualFileSystem:
+    def __init__(self):
+        self.files: Dict[str, str] = {}
+
+    def write(self, path: str, content: str) -> None:
+        self.files[path] = content
+
+    def list_files(self) -> Dict[str, str]:
+        return self.files
+
+# DeepAgent that plans tasks using LLM and executes tools
+class DeepAgent:
+    def __init__(self, llm: Any):
+        self.llm = llm
+        self.tools = [WebSearchTool()]
+        self.vfs = VirtualFileSystem()
+
+    def run(self, goal: str) -> None:
+        # Simple iterative loop: ask LLM for next step until finished
+        steps = 0
+        max_steps = 5
+        context = ""
+        while steps < max_steps:
+            prompt = f"Goal: {goal}\nContext: {context}\nWhat is the next action? Provide JSON with keys 'action' (one of 'search', 'write_file', 'finish') and relevant parameters."
+            response = self.llm(prompt)
+            try:
+                import json
+                data = json.loads(response.strip())
+            except Exception as e:
+                print(f"Failed to parse LLM output: {e}\nResponse was:\n{response}")
+                break
+            action = data.get("action")
+            if action == "search":
+                query = data.get("query", "")
+                result = self.tools[0]._run(query)
+                context += f"\nSearch({query}) -> {result}"
+            elif action == "write_file":
+                path = data.get("path")
+                content = data.get("content", "")
+                if path:
+                    self.vfs.write(path, content)
+                    context += f"\nWrote file {path}"
+            elif action == "finish":
+                print("Agent finished. Virtual files created:\n")
+                for p, c in self.vfs.list_files().items():
+                    print(f"--- {p} ---\n{c}\n")
+                break
+            else:
+                print(f"Unknown action: {action}")
+                break
+            steps += 1
 
 if __name__ == "__main__":
-    main()
+    # Ensure OpenAI key is set in environment
+    if not os.getenv("OPENAI_API_KEY"):
+        raise RuntimeError("Please set OPENAI_API_KEY environment variable.")
+    llm = OpenAI(temperature=0)
+    agent = DeepAgent(llm)
+    goal_text = "Create a README and example script that demonstrates searching the web for Python libraries."
+    agent.run(goal_text)
