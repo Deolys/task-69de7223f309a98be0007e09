@@ -1,17 +1,33 @@
-import sys
+import os
 from pathlib import Path
-from deep_agents_from_scratch import DeepAgent, PerplexityTool
+from dotenv import load_dotenv
+from langchain.llms.openai import OpenAI
+from langchain.agents import initialize_agent, AgentType
+from langchain.tools import BaseTool
+from langchain.utilities import SerpAPIWrapper
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: python main.py <search query>")
-        return
-    query = " ".join(sys.argv[1:])
-    agent = DeepAgent(tools=[PerplexityTool()], verbose=True)
-    result = agent.run(query)
-    out_path = Path("output.txt")
-    out_path.write_text(result, encoding="utf-8")
-    print(f"Result written to {out_path.resolve()}")
+load_dotenv()
+
+# Simple tool to write a file
+class WriteFileTool(BaseTool):
+    name = "write_file"
+    description = "Write content to a virtual file. Provide filename and content."
+
+    def _run(self, filename: str, content: str) -> str:
+        Path(filename).write_text(content)
+        return f"File {filename} written."
+
+# Tool for web search using SerpAPI (requires SERPAPI_API_KEY env var)
+search = SerpAPIWrapper()
+
+llm = OpenAI(temperature=0, model_name="gpt-4o-mini")
+
+tools = [WriteFileTool(), search]
+agent = initialize_agent(tools, llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
 
 if __name__ == "__main__":
-    main()
+    # Example query: find recent news about LangChain and write to file
+    prompt = (
+        "Search the web for the latest developments in LangChain. Summarize the findings and write a markdown file named 'langchain_update.md' with the summary."
+    )
+    agent.run(prompt)
