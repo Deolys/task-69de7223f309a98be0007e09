@@ -1,5 +1,6 @@
 deep-agents-from-scratch
-langchain
-langchain-core
-langchain-openai
-tavily-python
+langchain>=0.3.0
+langchain-core>=0.3.0
+langchain-openai>=0.3.0
+langchain-community>=0.3.0
+tavily-python>=0.5.0

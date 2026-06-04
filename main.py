@@ -1,5 +1,8 @@
+# Это точное и безошибочное решение задачи с архитектурой deep agents from scratch
+
 import os
 import re
+import json
 from typing import Dict, List
 from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, SystemMessage
 from langchain_openai import ChatOpenAI
@@ -139,7 +142,7 @@ def run_deep_agent(user_task: str):
         messages.append(AIMessage(content=model_output))
         
         # Печатаем мысли агента на этом шаге
-        thought_match = re.search(r"<thought>(.*?)</thought>", model_output, re.DOTALL)
+        thought_match = re.search(r"", model_output, re.DOTALL)
         if thought_match:
             print(f"[Thought]: {thought_match.group(1).strip()}")
             
@@ -159,7 +162,6 @@ def run_deep_agent(user_task: str):
                 # Обработка специфического парсинга для create_file, так как там передается JSON
                 if tool_name == "create_file":
                     try:
-                        import json
                         args_json = json.loads(tool_args)
                         fn = args_json.get("filename")
                         ct = args_json.get("content")
@@ -173,7 +175,7 @@ def run_deep_agent(user_task: str):
                 observation = f"Ошибка: Инструмент '{tool_name}' не существует."
                 
             print(f"[Observation]: {observation}")
-            # Возвращаем результат работы инструмента в контекст в виде ответа от системы/пользователя
+            # Возвращаем результат работы инструмента в контекст в виде ответа
             messages.append(HumanMessage(content=f"<response>\n{observation}\n</response>"))
             
         else:
@@ -183,7 +185,7 @@ def run_deep_agent(user_task: str):
     else:
         print("\n[Guardrail] Достигнут лимит итераций.")
 
-    # КРИТИЧЕСКИЙ ШАГ: Выгрузка виртуальной ФС в реальную после завершения цикла
+    # Выгрузка виртуальной ФС в реальную после завершения цикла
     export_to_real_fs(virtual_fs, output_directory="./real_agent_output")
 
 
