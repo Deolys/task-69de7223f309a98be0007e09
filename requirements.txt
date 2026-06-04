@@ -1,4 +1,3 @@
-langchain
+langchain-core
 langchain-openai
-serpapi
-python-dotenv
+tavily-python
