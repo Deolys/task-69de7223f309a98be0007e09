@@ -1,3 +1,1 @@
-langchain
-openai
-requests
+deep-agents-from-scratch>=0.1.0
