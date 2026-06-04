@@ -6,7 +6,7 @@ from typing import Dict, List
 
 # Импорты из LangChain согласно стандарту 0.3
 from langchain_core.messages import BaseMessage, HumanMessage, SystemMessage, AIMessage, ToolMessage
-from langchain_openai import ChatOpenAI
+from langchain.chat_models import ChatOpenAI
 
 # Оригинальные импорты из библиотеки deep-agents-from-scratch
 from deep_agents_from_scratch.file_tools import ls, read_file, write_file
