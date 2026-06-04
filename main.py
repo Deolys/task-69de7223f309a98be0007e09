@@ -1,20 +1,20 @@
 import os
 from pathlib import Path
 from dotenv import load_dotenv
-from langchain.llms.openai import OpenAI
-from langchain.agents import initialize_agent, AgentType
-from langchain.tools import BaseTool
-from langchain.utilities import SerpAPIWrapper
 
 # Load environment variables (e.g., OPENAI_API_KEY)
 load_dotenv()
+
+from langchain_openai import ChatOpenAI
+from langchain.agents import create_agent, Tool
+from langchain.tools import BaseTool
+from langchain.utilities.serpapi import SerpAPIWrapper
 
 class FileCreator(BaseTool):
     name = "FileCreator"
     description = "Creates a virtual file with given content. Returns the file path."
 
     def _run(self, file_name: str, content: str) -> str:
-        # Write to local filesystem (virtual for this exercise)
         Path(file_name).write_text(content)
         return f"File {file_name} created."
 
@@ -25,8 +25,8 @@ file_creator = FileCreator()
 tools = [search, file_creator]
 
 # LLM and agent setup
-llm = OpenAI(temperature=0)
-agent = initialize_agent(tools, llm, agent=AgentType.ZERO_SHOT_REACT_DESCRIPTION, verbose=True)
+llm = ChatOpenAI(temperature=0)
+agent = create_agent(llm=llm, tools=tools, agent_type="zero-shot-react-description", verbose=True)
 
 # Example query to demonstrate functionality
 query = "deep agents from scratch langchain"

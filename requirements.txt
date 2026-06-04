@@ -1,4 +1,5 @@
-langchain==0.2.0
-openai==1.30.0
-python-dotenv==1.0.1
-serpapi==0.3.0
+deep-agents-from-scratch
+langchain-openai>=0.2.0
+python-dotenv>=1.0.1
+serpapi>=0.3.0
+openai>=1.30.0
